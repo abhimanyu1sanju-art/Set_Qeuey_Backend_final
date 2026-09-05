@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     # Stored as a comma-separated string in .env; parsed into a list below.
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
+    # Optional regex for dynamic CORS origins (e.g. Vercel preview deployments).
+    # When set, FastAPI CORSMiddleware also accepts any origin matching this pattern.
+    # Example: https://set-queqy-frontend-3a22[a-z0-9-]*.vercel.app
+    cors_origin_regex: str = ""
+
     # ── Phase 2 — Image Storage ───────────────────────────────────────────────
     upload_dir: str = "uploads"           # Root upload directory (relative to cwd)
     max_file_size_mb: int = 20            # Maximum upload size in megabytes
@@ -80,6 +85,11 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> list[str]:
         """Return CORS origins as a clean list (handles trailing whitespace)."""
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def cors_origin_regex_or_none(self) -> Optional[str]:
+        """Return the CORS origin regex, or None if not configured."""
+        return self.cors_origin_regex.strip() or None
 
     @property
     def is_development(self) -> bool:
