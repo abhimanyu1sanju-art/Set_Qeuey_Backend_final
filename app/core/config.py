@@ -28,7 +28,8 @@ class Settings(BaseSettings):
 
     # Optional regex for dynamic CORS origins (e.g. Vercel preview deployments).
     # When set, FastAPI CORSMiddleware also accepts any origin matching this pattern.
-    # Example: https://set-queqy-frontend-3a22[a-z0-9-]*.vercel.app
+    # Covers both project spellings (set-queqy / set-qeuery) and all preview hashes.
+    # Example: https://set-q[a-z]+-frontend-3a22[a-z0-9-]*.vercel.app
     cors_origin_regex: str = ""
 
     # ── Phase 2 — Image Storage ───────────────────────────────────────────────
