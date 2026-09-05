@@ -1,0 +1,34 @@
+# ─── Phase 1 — Foundation ────────────────────────────────────────────────────
+fastapi
+uvicorn[standard]
+pymongo
+pydantic
+pydantic-settings
+python-dotenv
+
+# ─── Phase 2 — Image Management System ──────────────────────────────────────
+python-multipart        # multipart/form-data file uploads (FastAPI requirement)
+Pillow                  # Image processing, metadata extraction, thumbnail creation
+opencv-python-headless  # Additional image processing (no GUI deps)
+rasterio                # GeoTIFF / geospatial metadata extraction
+python-ulid             # Collision-safe ULID-based image_id generation
+
+# ─── Phase 4 — AI Analysis ─────────────────────────────────────────────────
+google-genai            # Google Gemini Vision API (the official google-genai SDK)
+
+# ─── Phase 8 — History & Finalization ───────────────────────────────────────
+# No new runtime dependencies. History uses:
+#   pymongo    - MongoDB persistence (already included)
+#   pydantic   - Schema validation (already included)
+#   python-ulid - Collision-safe history_id generation (already included)
+
+# ─── Phase 1 (Satellite) — Real Satellite Data Ingestion ───────────────────
+httpx                   # Async-capable HTTP client for Copernicus STAC API
+
+# ─── Phase 2 (Spectral) — Real Sentinel-2 Band Processing ─────────────────
+# rasterio is already listed above (Phase 2 image processing).
+# GDAL is a dependency of rasterio and installed with it.
+# The /vsicurl/ GDAL virtual filesystem is used to read band assets
+# directly from Copernicus HTTPS URLs without downloading full JP2 files.
+numpy                   # Explicit: NumPy is required for NDVI/NDWI/NBR pixel arithmetic
+matplotlib              # PNG preview generation from index arrays (non-scientific output)
