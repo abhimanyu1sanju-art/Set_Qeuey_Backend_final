@@ -568,11 +568,15 @@ def run_infrastructure_analysis(
             all_construction = [d for d in raw_construction if d["confidence"] >= confidence_threshold]
             logger.info("Construction proxy candidates: %d", len(all_construction))
 
-    # ── 9. Generate preview PNG ───────────────────────────────────────────────
+    # ── 9. Generate preview PNG and store as base64 (survives Render restarts) ─
     preview_dir = Path("outputs") / "infrastructure"
     preview_path = preview_dir / f"{result_id}.png"
+    preview_image_b64 = None
     try:
         _generate_preview(ndbi, building_mask, road_mask, construction_mask, preview_path)
+        if preview_path.exists():
+            import base64
+            preview_image_b64 = base64.b64encode(preview_path.read_bytes()).decode('ascii')
     except Exception as exc:
         logger.warning("Preview generation failed (non-fatal): %s", exc)
 
@@ -621,6 +625,7 @@ def run_infrastructure_analysis(
         "error": None,
         "cached": False,
         "created_at": _now().isoformat(),
+        "preview_image_b64": preview_image_b64,
     }
 
     # ── 12. Persist to MongoDB ────────────────────────────────────────────────

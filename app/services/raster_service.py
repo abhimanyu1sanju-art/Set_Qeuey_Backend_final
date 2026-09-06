@@ -178,9 +178,13 @@ def resolve_band_url(assets: Dict, band_name: str, prefer_s3: bool = False) -> O
     Find the HTTPS URL for a specific Sentinel-2 band from STAC asset dict.
 
     Strategy:
-      1. Look for an asset whose band metadata lists the requested band.
-      2. Prefer 10m assets (lower GSD) when multiple match.
-      3. Return HTTPS URL from https_href (preferred) or construct from href.
+      1. Look for an asset whose 'bands' metadata list includes the requested band.
+      2. Fallback: match by asset key name (e.g. 'B08_10m', 'B08-10m', 'B08').
+         Real Copernicus STAC responses often omit the 'bands' array entirely and
+         identify bands purely by the asset key name. Without this fallback every
+         band lookup fails and we get "Band B08 unavailable".
+      3. Prefer 10m assets (lower GSD) when multiple match.
+      4. Return HTTPS URL from https_href (preferred) or construct from href.
 
     Returns None if the band is not found in the assets dict.
     """
@@ -188,38 +192,53 @@ def resolve_band_url(assets: Dict, band_name: str, prefer_s3: bool = False) -> O
     candidates = []
 
     for asset_name, asset_info in assets.items():
+        # ── Primary: match via explicit 'bands' metadata ──────────────────────
         if isinstance(asset_info, dict):
             bands = asset_info.get('bands', [])
+            gsd = asset_info.get('gsd', 999)
+            href = asset_info.get('href') or ''
+            https_href = asset_info.get('https_href') or ''
         else:
             bands = getattr(asset_info, 'bands', []) if hasattr(asset_info, 'bands') else []
-            
-        if not bands:
+            gsd = getattr(asset_info, 'gsd', 999)
+            href = getattr(asset_info, 'href', None) or ''
+            https_href = getattr(asset_info, 'https_href', None) or ''
+
+        matched = False
+        if bands:
+            matched = band_upper in (
+                b.upper() if isinstance(b, str) else b.get('name', '').upper()
+                for b in bands
+            )
+
+        # ── Fallback: match by asset key name when bands[] is empty ──────────
+        # Copernicus STAC asset keys for S2 look like: B08_10m, B04_10m, B11_20m
+        # Also handles: B08-10m, B08.jp2, or simply B08
+        if not matched and not bands:
+            # Normalise key: upper-case, replace separators with '_'
+            key_norm = asset_name.upper().replace('-', '_').replace('.', '_')
+            # Match if key starts with the band name followed by a separator or end
+            matched = (
+                key_norm == band_upper
+                or key_norm.startswith(band_upper + '_')
+                or key_norm.startswith(band_upper + '-')
+            )
+
+        if not matched:
             continue
-        if band_upper in (b.upper() if isinstance(b, str) else b.get('name', '').upper() for b in bands):
-            if isinstance(asset_info, dict):
-                gsd = asset_info.get('gsd', 999)
-                href = asset_info.get('href') or ''
-                https_href = asset_info.get('https_href') or ''
-                if prefer_s3 and href.startswith('s3://'):
-                    url = href
-                else:
-                    url = https_href or href
-            else:
-                gsd = getattr(asset_info, 'gsd', 999)
-                href = getattr(asset_info, 'href', None) or ''
-                https_href = getattr(asset_info, 'https_href', None) or ''
-                if prefer_s3 and href.startswith('s3://'):
-                    url = href
-                else:
-                    url = https_href or href
-                
-            if url:
-                candidates.append((gsd, url, asset_name))
+
+        if prefer_s3 and href.startswith('s3://'):
+            url = href
+        else:
+            url = https_href or href
+
+        if url:
+            candidates.append((gsd, url, asset_name))
 
     if not candidates:
         return None
 
-    # Sort by GSD ascending — prefer highest resolution (lowest GSD)
+    # Sort by GSD ascending — prefer highest resolution (lowest GSD number)
     candidates.sort(key=lambda x: x[0])
     _, url, asset_name = candidates[0]
 
@@ -227,7 +246,7 @@ def resolve_band_url(assets: Dict, band_name: str, prefer_s3: bool = False) -> O
     if url and url.startswith("s3://") and not prefer_s3:
         url = _s3_to_https(url)
 
-    logger.debug("Resolved band %s → asset=%s url=%.60s…", band_upper, asset_name, url or "")
+    logger.debug("Resolved band %s -> asset=%s url=%.60s", band_upper, asset_name, url or "")
     return url
 
 

@@ -54,7 +54,26 @@ def get_fusion_results(analysis_id: str = Path(...)) -> FusionAnalysisResponse:
     status_code=200,
 )
 def get_fusion_preview(analysis_id: str = Path(...)):
+    """Serve fusion heatmap PNG. Falls back to MongoDB base64 on Render restart."""
     img_path = FileSysPath("outputs") / "fusion" / f"{analysis_id}.png"
-    if not img_path.exists():
+
+    if img_path.exists():
+        return FileResponse(img_path, media_type="image/png",
+                            headers={"Cache-Control": "public, max-age=3600"})
+
+    col = get_fusion_collection()
+    doc = col.find_one({"result_id": analysis_id}, {"_id": 0, "preview_image_b64": 1, "result_id": 1})
+    if not doc:
         raise HTTPException(status_code=404, detail="Preview image not found")
-    return FileResponse(img_path, media_type="image/png")
+
+    b64 = doc.get("preview_image_b64")
+    if not b64:
+        raise HTTPException(status_code=404, detail="Preview image not yet generated. Re-run with force_reprocess=true.")
+
+    import base64
+    from fastapi.responses import Response as FastAPIResponse
+    return FastAPIResponse(
+        content=base64.b64decode(b64),
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )

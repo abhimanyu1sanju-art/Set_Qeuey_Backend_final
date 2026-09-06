@@ -177,14 +177,23 @@ def run_fusion_analysis(
     s1_assets = s1_doc.get("assets", {})
     
     # helper to find asset by name case-insensitively
+    # Also handles Copernicus S1 GRD keys like 's1a-iw-grd-vv-20250101...'
     def _find_pol(assets, p):
         p_up = p.upper()
         for k, v in assets.items():
-            if k.upper() == p_up or (
-                isinstance(v, dict) and 
-                p_up in [b.upper() for b in (v.get("bands") or []) if isinstance(b, str)]
+            k_up = k.upper()
+            # Exact match or key contains the polarisation as a word segment
+            if (
+                k_up == p_up
+                or k_up.startswith(p_up + "_") or k_up.startswith(p_up + "-")
+                or ("-" + p_up + "-") in k_up or ("_" + p_up + "_") in k_up
+                or k_up.endswith("-" + p_up) or k_up.endswith("_" + p_up)
             ):
                 return k
+            if isinstance(v, dict):
+                bands = v.get("bands") or []
+                if p_up in [b.upper() for b in bands if isinstance(b, str)]:
+                    return k
         return None
 
     vv_key = _find_pol(s1_assets, "VV")
@@ -280,7 +289,14 @@ def run_fusion_analysis(
     
     logger.info("Generating Fusion Preview...")
     preview_path = Path("outputs") / "fusion" / f"{result_id}.png"
-    _generate_preview(fusion_map, preview_path)
+    preview_image_b64 = None
+    try:
+        _generate_preview(fusion_map, preview_path)
+        if preview_path.exists():
+            import base64
+            preview_image_b64 = base64.b64encode(preview_path.read_bytes()).decode('ascii')
+    except Exception as exc:
+        logger.warning("Fusion preview generation failed (non-fatal): %s", exc)
     
     processing_time = round(time.time() - start_time, 2)
     
@@ -303,7 +319,8 @@ def run_fusion_analysis(
             "duration_seconds": processing_time,
             "real_data": True,
             "resampling": "bilinear"
-        }
+        },
+        "preview_image_b64": preview_image_b64,
     }
     
     try:

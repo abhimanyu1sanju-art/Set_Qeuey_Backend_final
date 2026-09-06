@@ -93,8 +93,10 @@ async def get_thumbnail(image_id: str) -> FileResponse:
     """
     Serve the thumbnail JPEG for a stored image.
 
-    Retrieves the thumbnail path from MongoDB and streams the file.
     Returns 404 if the image record or the thumbnail file is missing.
+    On Render (ephemeral filesystem), uploaded files are lost after restarts —
+    the record exists in MongoDB but the file is gone. This returns a clean 404
+    so the frontend can show a placeholder instead of crashing.
     """
     doc = image_service.get_image_by_id(image_id)  # raises 404 if not found
 
@@ -104,7 +106,13 @@ async def get_thumbnail(image_id: str) -> FileResponse:
 
     thumb_path = Path(thumb_path_str)
     if not thumb_path.exists():
-        raise HTTPException(status_code=404, detail="Thumbnail file not found on disk")
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Thumbnail file not found. The server may have restarted and lost "
+                "the uploaded file. Please re-upload the image."
+            ),
+        )
 
     return FileResponse(
         path=str(thumb_path),

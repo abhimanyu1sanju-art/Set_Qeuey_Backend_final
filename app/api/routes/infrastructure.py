@@ -103,27 +103,38 @@ def get_infrastructure_preview(result_id: str):
     """
     Serve the colorized infrastructure detection preview PNG.
 
-    The preview overlays:
-    - NDBI heatmap (background)
-    - Buildings: cyan pixels
-    - Roads: yellow pixels
-    - Construction candidates: red pixels
+    First attempts to serve from local filesystem (fast, for local dev).
+    Falls back to base64-encoded bytes stored in MongoDB (production-safe,
+    survives Render ephemeral filesystem restarts).
     """
     preview_path = Path("outputs") / "infrastructure" / f"{result_id}.png"
 
-    if not preview_path.exists():
-        # Try finding by scene_id pattern too
-        col = get_infrastructure_results_collection()
-        doc = col.find_one({"result_id": result_id}, {"_id": 0, "result_id": 1})
-        if not doc:
-            raise HTTPException(status_code=404, detail=f"Preview not found for result_id={result_id}")
-        raise HTTPException(
-            status_code=404,
-            detail=f"Preview file not generated yet. Re-run analysis with force_reprocess=true.",
+    # ── Fast path: serve from local file (local dev / warm Render instance) ──
+    if preview_path.exists():
+        return FileResponse(
+            path=str(preview_path),
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=3600"},
         )
 
-    return FileResponse(
-        path=str(preview_path),
+    # ── Fallback: serve from MongoDB base64 (survives restarts) ──────────────
+    col = get_infrastructure_results_collection()
+    doc = col.find_one({"result_id": result_id}, {"_id": 0, "preview_image_b64": 1, "result_id": 1})
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"Preview not found for result_id={result_id}")
+
+    b64 = doc.get("preview_image_b64")
+    if not b64:
+        raise HTTPException(
+            status_code=404,
+            detail="Preview image not yet generated. Re-run analysis with force_reprocess=true.",
+        )
+
+    import base64
+    from fastapi.responses import Response as FastAPIResponse
+    image_bytes = base64.b64decode(b64)
+    return FastAPIResponse(
+        content=image_bytes,
         media_type="image/png",
         headers={"Cache-Control": "public, max-age=3600"},
     )

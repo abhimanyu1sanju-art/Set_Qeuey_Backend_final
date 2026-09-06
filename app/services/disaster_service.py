@@ -397,12 +397,16 @@ def run_disaster_analysis(
         # Just use NDVI change proxy or Phase 3 data for now in this skeleton
         raise ValueError(f"Disaster type {disaster_type} is implemented via Phase 3 change detection or not fully supported in this optical pass yet.")
 
-    # Preview
+    # Preview — generate PNG and store as base64 (survives Render restarts)
+    preview_image_b64 = None
     if base_map_for_preview is not None and mask_for_preview is not None:
         preview_dir = Path("outputs") / "disaster"
         preview_path = preview_dir / f"{result_id}.png"
         try:
             _generate_preview(base_map_for_preview, mask_for_preview, preview_path, colormap_type)
+            if preview_path.exists():
+                import base64
+                preview_image_b64 = base64.b64encode(preview_path.read_bytes()).decode('ascii')
         except Exception as exc:
             logger.warning("Preview generation failed: %s", exc)
 
@@ -440,6 +444,7 @@ def run_disaster_analysis(
         "error": None,
         "cached": False,
         "created_at": _now().isoformat(),
+        "preview_image_b64": preview_image_b64,
     }
 
     try:
